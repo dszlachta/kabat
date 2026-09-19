@@ -1,0 +1,44 @@
+[
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "eip712Domain",
+    "inputs": [],
+    "outputs": [
+      { "name": "", "type": "bytes1" },
+      { "name": "", "type": "string" },
+      { "name": "", "type": "string" },
+      { "name": "", "type": "uint256" },
+      { "name": "", "type": "address" },
+      { "name": "", "type": "bytes32" },
+      { "name": "", "type": "uint256[]" }
+    ]
+  },
+  {
+    "stateMutability": "nonpayable",
+    "type": "function",
+    "name": "withdraw",
+    "inputs": [
+      { "name": "payment_id", "type": "uint256" },
+      { "name": "signature", "type": "bytes" }
+    ],
+    "outputs": []
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "eip712_Withdraw",
+    "inputs": [{ "name": "payment_id", "type": "uint256" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          { "name": "paymentId", "type": "uint256" },
+          { "name": "recipient", "type": "address" },
+          { "name": "action", "type": "uint8" }
+        ]
+      }
+    ]
+  }
+]

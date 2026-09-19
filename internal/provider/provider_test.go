@@ -175,12 +175,156 @@ func TestRequest_disconnected(t *testing.T) {
 
 func TestRequest_unsupportedWalletMethod(t *testing.T) {
 	p := newProvider(t, nil, provider.Options{})
-	for _, method := range []string{"eth_sign", "personal_sign", "eth_signTypedData", "eth_signTypedData_v4"} {
+	for _, method := range []string{"eth_sign", "personal_sign"} {
 		_, err := p.Request(context.Background(), provider.RequestArguments{Method: method})
 		var rpcErr *provider.ProviderRpcError
 		require.ErrorAs(t, err, &rpcErr)
 		require.Equal(t, 4200, rpcErr.Code, method)
 	}
+}
+
+func TestRequest_ethSignTypedData_v1Unsupported(t *testing.T) {
+	p := newProvider(t, nil, provider.Options{Confirm: &stubConfirm{approve: true}})
+	_, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData",
+		Params: []any{wallets.Addresses()[0], []any{map[string]any{"type": "string", "name": "message", "value": "Hi"}}},
+	})
+	var rpcErr *provider.ProviderRpcError
+	require.ErrorAs(t, err, &rpcErr)
+	require.Equal(t, 4200, rpcErr.Code)
+}
+
+func etherMail(from string, chainID int64) map[string]any {
+	return map[string]any{
+		"types": map[string]any{
+			"EIP712Domain": []any{
+				map[string]any{"name": "name", "type": "string"},
+				map[string]any{"name": "version", "type": "string"},
+				map[string]any{"name": "chainId", "type": "uint256"},
+				map[string]any{"name": "verifyingContract", "type": "address"},
+			},
+			"Person": []any{
+				map[string]any{"name": "name", "type": "string"},
+				map[string]any{"name": "wallet", "type": "address"},
+			},
+			"Mail": []any{
+				map[string]any{"name": "from", "type": "Person"},
+				map[string]any{"name": "to", "type": "Person"},
+				map[string]any{"name": "contents", "type": "string"},
+			},
+		},
+		"primaryType": "Mail",
+		"domain": map[string]any{
+			"name":              "Ether Mail",
+			"version":           "1",
+			"chainId":           chainID,
+			"verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC",
+		},
+		"message": map[string]any{
+			"from": map[string]any{
+				"name":   "Cow",
+				"wallet": from,
+			},
+			"to": map[string]any{
+				"name":   "Bob",
+				"wallet": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+			},
+			"contents": "Hello, Bob!",
+		},
+	}
+}
+
+func TestRequest_signTypedData_fromMismatch(t *testing.T) {
+	selected := wallets.Accounts()[0].Address
+	p := newProvider(t, &ethAPI{chainID: big.NewInt(31337)}, provider.Options{
+		Selected: selected,
+		Confirm:  &stubConfirm{approve: true},
+	})
+	_, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData_v4",
+		Params: []any{wallets.Addresses()[1], etherMail(wallets.Addresses()[1], 31337)},
+	})
+	var rpcErr *provider.ProviderRpcError
+	require.ErrorAs(t, err, &rpcErr)
+	require.Equal(t, 4100, rpcErr.Code)
+}
+
+func TestRequest_signTypedData_chainIdMismatch(t *testing.T) {
+	from := wallets.Addresses()[0]
+	p := newProvider(t, &ethAPI{chainID: big.NewInt(31337)}, provider.Options{
+		Selected: wallets.Accounts()[0].Address,
+		Confirm:  &stubConfirm{approve: true},
+	})
+	_, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData_v4",
+		Params: []any{from, etherMail(from, 1)},
+	})
+	var rpcErr *provider.ProviderRpcError
+	require.ErrorAs(t, err, &rpcErr)
+	require.Equal(t, -32602, rpcErr.Code)
+}
+
+func TestRequest_signTypedData_rejected(t *testing.T) {
+	from := wallets.Addresses()[0]
+	p := newProvider(t, &ethAPI{chainID: big.NewInt(31337)}, provider.Options{
+		Selected: wallets.Accounts()[0].Address,
+		Confirm:  &stubConfirm{approve: false},
+	})
+	_, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData_v4",
+		Params: []any{from, etherMail(from, 31337)},
+	})
+	var rpcErr *provider.ProviderRpcError
+	require.ErrorAs(t, err, &rpcErr)
+	require.Equal(t, 4001, rpcErr.Code)
+}
+
+func TestRequest_signTypedData_approved(t *testing.T) {
+	from := wallets.Addresses()[0]
+	confirm := &stubConfirm{approve: true}
+	p := newProvider(t, &ethAPI{chainID: big.NewInt(31337)}, provider.Options{
+		Selected: wallets.Accounts()[0].Address,
+		Confirm:  confirm,
+	})
+	got, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData_v4",
+		Params: []any{from, etherMail(from, 31337)},
+	})
+	require.NoError(t, err)
+	sig, ok := got.(string)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(sig, "0x"))
+	require.Len(t, sig, 132)
+	require.Equal(t, wallets.Accounts()[0].Address, confirm.got.From)
+	require.Equal(t, "typedData", confirm.got.Raw["kind"])
+	require.Equal(t, "Sign typed data", confirm.got.Raw["title"])
+	require.Equal(t, "Mail", confirm.got.Raw["primaryType"])
+	fields, ok := confirm.got.Raw["fields"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, fields)
+	require.NotNil(t, confirm.got.Raw["raw"])
+	b, err := json.Marshal(confirm.got.Raw)
+	require.NoError(t, err)
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(b, &decoded))
+	_, ok = decoded["fields"].([]any)
+	require.True(t, ok)
+}
+
+func TestRequest_ethSignTypedData_v4Shape(t *testing.T) {
+	from := wallets.Addresses()[0]
+	p := newProvider(t, &ethAPI{chainID: big.NewInt(31337)}, provider.Options{
+		Selected: wallets.Accounts()[0].Address,
+		Confirm:  &stubConfirm{approve: true},
+	})
+	got, err := p.Request(context.Background(), provider.RequestArguments{
+		Method: "eth_signTypedData",
+		Params: []any{from, etherMail(from, 31337)},
+	})
+	require.NoError(t, err)
+	sig, ok := got.(string)
+	require.True(t, ok)
+	require.Len(t, sig, 132)
 }
 
 func TestRequest_sendTransaction_rejected(t *testing.T) {

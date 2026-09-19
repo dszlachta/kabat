@@ -10,6 +10,9 @@ package wallets
 
 import (
 	"crypto/ecdsa"
+	"errors"
+	"strings"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -20,6 +23,11 @@ type Account struct {
 	PrivateKey *ecdsa.PrivateKey
 	Address    common.Address
 }
+
+var (
+	ErrInvalidPrivateKey = errors.New("invalid private key")
+	ErrDuplicateWallet   = errors.New("wallet already exists")
+)
 
 // Default private keys for Anvil accounts 0–9.
 var privateKeys = []string{
@@ -36,7 +44,9 @@ var privateKeys = []string{
 }
 
 var (
+	mu          sync.Mutex
 	accounts    []Account
+	extra       []Account
 	accountsErr error
 )
 
@@ -64,26 +74,100 @@ func LoadError() error {
 	return accountsErr
 }
 
-// Accounts returns the 10 default Anvil development wallets.
+// Accounts returns the default Anvil wallets plus any added this session.
 func Accounts() []Account {
-	return accounts
+	mu.Lock()
+	defer mu.Unlock()
+	out := make([]Account, 0, len(accounts)+len(extra))
+	out = append(out, accounts...)
+	out = append(out, extra...)
+	return out
 }
 
-// Addresses returns the checksummed hex addresses of the default wallets.
+// Addresses returns the checksummed hex addresses of the known wallets.
 func Addresses() []string {
-	out := make([]string, len(accounts))
-	for i, acc := range accounts {
+	accs := Accounts()
+	out := make([]string, len(accs))
+	for i, acc := range accs {
 		out[i] = acc.Address.Hex()
 	}
 	return out
 }
 
-// Find returns the predefined wallet with the given address.
+// Find returns the known wallet with the given address.
 func Find(addr common.Address) (Account, bool) {
+	mu.Lock()
+	defer mu.Unlock()
 	for _, acc := range accounts {
 		if acc.Address == addr {
 			return acc, true
 		}
 	}
+	for _, acc := range extra {
+		if acc.Address == addr {
+			return acc, true
+		}
+	}
 	return Account{}, false
+}
+
+// AddRandom generates a new ECDSA key and appends it to the known wallets.
+func AddRandom() (Account, error) {
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		return Account{}, err
+	}
+	return addKey(key)
+}
+
+// AddPrivateKey parses a hex private key (optional 0x) and appends the wallet.
+func AddPrivateKey(hexKey string) (Account, error) {
+	key, err := parsePrivateKey(hexKey)
+	if err != nil {
+		return Account{}, err
+	}
+	return addKey(key)
+}
+
+// ResetAdded drops wallets added this session. Tests use this to restore the
+// 10 Anvil defaults.
+func ResetAdded() {
+	mu.Lock()
+	defer mu.Unlock()
+	extra = nil
+}
+
+func parsePrivateKey(hexKey string) (*ecdsa.PrivateKey, error) {
+	hexKey = strings.TrimSpace(hexKey)
+	hexKey = strings.TrimPrefix(hexKey, "0x")
+	hexKey = strings.TrimPrefix(hexKey, "0X")
+	if hexKey == "" {
+		return nil, ErrInvalidPrivateKey
+	}
+	key, err := crypto.HexToECDSA(hexKey)
+	if err != nil {
+		return nil, ErrInvalidPrivateKey
+	}
+	return key, nil
+}
+
+func addKey(key *ecdsa.PrivateKey) (Account, error) {
+	acc := Account{
+		PrivateKey: key,
+		Address:    crypto.PubkeyToAddress(key.PublicKey),
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for _, existing := range accounts {
+		if existing.Address == acc.Address {
+			return Account{}, ErrDuplicateWallet
+		}
+	}
+	for _, existing := range extra {
+		if existing.Address == acc.Address {
+			return Account{}, ErrDuplicateWallet
+		}
+	}
+	extra = append(extra, acc)
+	return acc, nil
 }

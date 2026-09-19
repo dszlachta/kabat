@@ -44,6 +44,11 @@ func (s *WalletService) watch(ctx context.Context) {
 }
 
 func (s *WalletService) watchOnce(ctx context.Context) error {
+	if err := s.catchUp(ctx); err != nil {
+		report.Error(err)
+	}
+	s.emitTransactions()
+
 	client, err := chain.ConnectURL(ctx, chain.WebsocketURL(s.url))
 	if err != nil {
 		return err
@@ -73,9 +78,15 @@ func (s *WalletService) watchHeads(ctx context.Context, heads <-chan *types.Head
 			if err != nil {
 				return err
 			}
-		case _, ok := <-heads:
+		case head, ok := <-heads:
 			if !ok {
 				return nil
+			}
+			if head != nil && head.Number != nil {
+				if err := s.ingestThrough(ctx, head.Number.Uint64()); err != nil {
+					report.Error(err)
+				}
+				s.emitTransactions()
 			}
 			accs, err := s.Accounts()
 			if err != nil {

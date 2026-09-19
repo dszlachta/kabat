@@ -10,8 +10,14 @@
     }
   }
 
+  let chainConnected = false
+
+  // selectedAddress is the EIP-1193 field for this page only.
   const provider = {
     selectedAddress: null,
+    isConnected() {
+      return chainConnected
+    },
     request(args) {
       const id = nextId++
       return new Promise((resolve, reject) => {
@@ -23,6 +29,9 @@
       if (typeof handler !== "function") return
       if (!listeners.has(event)) listeners.set(event, new Set())
       listeners.get(event).add(handler)
+    },
+    addListener(event, handler) {
+      provider.on(event, handler)
     },
     removeListener(event, handler) {
       listeners.get(event)?.delete(handler)
@@ -58,6 +67,20 @@
       return
     }
     if (msg.type === "kabat/event") {
+      if (msg.event === "connect") {
+        chainConnected = true
+      }
+      if (msg.event === "disconnect") {
+        chainConnected = false
+        setSelectedAddress([])
+        for (const [id, waiter] of pending) {
+          pending.delete(id)
+          const err = new Error(msg.params?.message || "provider is disconnected")
+          err.code = msg.params?.code ?? 4900
+          err.data = msg.params?.data
+          waiter.reject(err)
+        }
+      }
       if (msg.event === "accountsChanged") {
         setSelectedAddress(msg.params)
       }
@@ -83,4 +106,54 @@
   }
   window.addEventListener("eip6963:requestProvider", announce)
   announce()
+
+  function isLocalhost() {
+    const host = location.hostname
+    return host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      host.endsWith(".localhost")
+  }
+
+  function ours() {
+    try {
+      return window.ethereum === provider
+    } catch {
+      return false
+    }
+  }
+
+  function attach() {
+    try {
+      Object.defineProperty(window, "ethereum", {
+        configurable: true,
+        enumerable: true,
+        get() {
+          return provider
+        },
+        set(value) {
+          if (value === provider) return
+          queueMicrotask(restore)
+        },
+      })
+    } catch {
+      try {
+        window.ethereum = provider
+      } catch {
+        return
+      }
+    }
+    announce()
+  }
+
+  function restore() {
+    if (ours()) return
+    attach()
+  }
+
+  if (isLocalhost()) {
+    attach()
+    setInterval(restore, 250)
+  }
 })()

@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS
+          - os: ubuntu-24.04
+            name: Linux
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-4-dev \
+            libwebkitgtk-6.0-dev
+
+      - name: Install Wails
+        run: |
+          version="$(go list -m github.com/wailsapp/wails/v3 | awk '{print $2}')"
+          go install "github.com/wailsapp/wails/v3/cmd/wails3@${version}"
+
+      - name: Build
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            wails3 task darwin:package
+          else
+            wails3 task linux:build
+          fi
+
+      - name: Package artifact
+        run: |
+          mkdir -p dist
+          arch="$(go env GOARCH)"
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            ditto -c -k --keepParent bin/kabat.app "dist/kabat-macos-${arch}.zip"
+          else
+            cp bin/kabat "dist/kabat-linux-${arch}"
+            chmod +x "dist/kabat-linux-${arch}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kabat-${{ matrix.name }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Attach to GitHub Release
+        if: github.event_name == 'release'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber

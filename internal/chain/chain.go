@@ -116,6 +116,101 @@ func (c *Client) ChainID(ctx context.Context) (*big.Int, error) {
 	return c.eth.ChainID(ctx)
 }
 
+// BlockNumber returns the latest block number.
+func (c *Client) BlockNumber(ctx context.Context) (uint64, error) {
+	return c.eth.BlockNumber(ctx)
+}
+
+// BlockByNumber returns the block with full transactions.
+func (c *Client) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
+	return c.eth.BlockByNumber(ctx, number)
+}
+
+// BlockByHash returns the block with full transactions.
+func (c *Client) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
+	return c.eth.BlockByHash(ctx, hash)
+}
+
+// TransactionReceipt returns the receipt for hash.
+func (c *Client) TransactionReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
+	return c.eth.TransactionReceipt(ctx, hash)
+}
+
+// CallTrace is debug_traceTransaction with callTracer.
+type CallTrace struct {
+	Error        string        `json:"error,omitempty"`
+	RevertReason string        `json:"revertReason,omitempty"`
+	Output       hexutil.Bytes `json:"output,omitempty"`
+}
+
+// TraceCall is debug_traceTransaction using callTracer.
+func (c *Client) TraceCall(ctx context.Context, hash common.Hash) (*CallTrace, error) {
+	var out CallTrace
+	err := c.RPC().CallContext(ctx, &out, "debug_traceTransaction", hash, map[string]any{
+		"tracer": "callTracer",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CodeAt returns the latest bytecode at addr (empty if none).
+func (c *Client) CodeAt(ctx context.Context, addr common.Address) ([]byte, error) {
+	return c.eth.CodeAt(ctx, addr, nil)
+}
+
+// Call is eth_call against the latest block.
+func (c *Client) Call(ctx context.Context, msg ethereum.CallMsg) ([]byte, error) {
+	return c.eth.CallContract(ctx, msg, nil)
+}
+
+// TraceAccount is the balance fields from prestateTracer (diffMode).
+type TraceAccount struct {
+	Balance *hexutil.Big `json:"balance,omitempty"`
+}
+
+// TxDiff is pre/post account balances for one transaction.
+type TxDiff struct {
+	Pre  map[common.Address]TraceAccount `json:"pre"`
+	Post map[common.Address]TraceAccount `json:"post"`
+}
+
+// Balance returns pre and post ETH for addr. Missing side is 0; a post account
+// with no balance field keeps the pre balance (field-level diff).
+func (d *TxDiff) Balance(addr common.Address) (pre, post *big.Int) {
+	pre = new(big.Int)
+	post = new(big.Int)
+	if d == nil {
+		return pre, post
+	}
+	preAcc, inPre := d.Pre[addr]
+	postAcc, inPost := d.Post[addr]
+	if inPre && preAcc.Balance != nil {
+		pre = (*big.Int)(preAcc.Balance)
+	}
+	switch {
+	case inPost && postAcc.Balance != nil:
+		post = (*big.Int)(postAcc.Balance)
+	case inPost:
+		post = new(big.Int).Set(pre)
+	}
+	return pre, post
+}
+
+// TraceTxDiff is debug_traceTransaction with prestateTracer in diffMode.
+func (c *Client) TraceTxDiff(ctx context.Context, hash common.Hash) (*TxDiff, error) {
+	var out TxDiff
+	err := c.RPC().CallContext(ctx, &out, "debug_traceTransaction", hash, map[string]any{
+		"tracer":       "prestateTracer",
+		"tracerConfig": map[string]any{"diffMode": true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Close closes the RPC connection.
 func (c *Client) Close() {
 	c.eth.Close()

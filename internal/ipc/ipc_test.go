@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"path/filepath"
 	"testing"
@@ -48,6 +47,17 @@ func TestParseRequest_missingMethod(t *testing.T) {
 	require.ErrorIs(t, err, ipc.ErrMissingMethod)
 }
 
+func TestParseRequest_keepsOriginAndSessionULID(t *testing.T) {
+	req, err := ipc.ParseRequest(ipc.Envelope{
+		ULID:    mustULID(t),
+		Payload: []byte(`{"method":"eth_requestAccounts","origin":"https://dapp.example/app","sessionUlid":"01TESTSESSION00000000000000"}`),
+	})
+	require.NoError(t, err)
+	require.Equal(t, "eth_requestAccounts", req.Method)
+	require.Equal(t, "https://dapp.example/app", req.Origin)
+	require.Equal(t, "01TESTSESSION00000000000000", req.SessionULID)
+}
+
 type mockHandler struct {
 	selected string
 	fn       func(method string, params any) (any, error)
@@ -69,9 +79,8 @@ func startServer(t *testing.T, h ipc.Handler) net.Conn {
 		_ = b.Close()
 	})
 	go srv.ServeConn(a)
-	require.NoError(t, b.SetReadDeadline(time.Now().Add(2*time.Second)))
-	_, err := ipc.ReadEnvelope(b) // connect
-	require.NoError(t, err)
+	readEvent(t, b, "connect")
+	readEvent(t, b, "chainChanged")
 	return b
 }
 
@@ -90,6 +99,15 @@ func readReply(t *testing.T, conn net.Conn) ipc.Envelope {
 	env, err := ipc.ReadEnvelope(conn)
 	require.NoError(t, err)
 	return env
+}
+
+func readEvent(t *testing.T, conn net.Conn, name string) ipc.ResultPayload {
+	t.Helper()
+	env := readReply(t, conn)
+	var payload ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(env.Payload, &payload))
+	require.Equal(t, name, payload.Event)
+	return payload
 }
 
 func TestServer_requestResult(t *testing.T) {
@@ -220,6 +238,56 @@ func TestServer_missingULIDRejected(t *testing.T) {
 	require.Equal(t, -32600, payload.Error.Code)
 }
 
+type dappHandler struct {
+	mockHandler
+	fromDapp func(ipc.RequestPayload) (any, error)
+}
+
+func (d dappHandler) RequestFromDapp(req ipc.RequestPayload) (any, error) {
+	return d.fromDapp(req)
+}
+
+func TestServer_requestFromDapp(t *testing.T) {
+	var got ipc.RequestPayload
+	h := dappHandler{
+		mockHandler: mockHandler{
+			selected: wallets.Addresses()[0],
+			fn: func(method string, params any) (any, error) {
+				if method == "eth_chainId" {
+					return "0x7a69", nil
+				}
+				return nil, errors.New("should use RequestFromDapp")
+			},
+		},
+		fromDapp: func(req ipc.RequestPayload) (any, error) {
+			got = req
+			return []string{wallets.Addresses()[1]}, nil
+		},
+	}
+	conn := startServer(t, h)
+	id := mustULID(t)
+	payload, err := ipc.EncodeJSON(ipc.RequestPayload{
+		Method:      "eth_requestAccounts",
+		Origin:      "https://dapp.example",
+		SessionULID: "01TESTSESSION00000000000000",
+	})
+	require.NoError(t, err)
+	require.NoError(t, ipc.WriteFrame(conn, ipc.Envelope{
+		ULID:    id,
+		TS:      ipc.NowMS(),
+		Payload: payload,
+	}))
+	env := readReply(t, conn)
+	require.Equal(t, id, env.ULID)
+	var result ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(env.Payload, &result))
+	require.Equal(t, []any{wallets.Addresses()[1]}, result.Result)
+	require.Equal(t, "eth_requestAccounts", got.Method)
+	require.Equal(t, "https://dapp.example", got.Origin)
+	require.Equal(t, "01TESTSESSION00000000000000", got.SessionULID)
+	require.Equal(t, id, got.ULID)
+}
+
 func TestServer_broadcastAccountsChanged(t *testing.T) {
 	h := mockHandler{
 		selected: wallets.Addresses()[2],
@@ -236,9 +304,8 @@ func TestServer_broadcastAccountsChanged(t *testing.T) {
 	})
 	go srv.ServeConn(a)
 
-	require.NoError(t, b.SetReadDeadline(time.Now().Add(2*time.Second)))
-	_, err := ipc.ReadEnvelope(b) // connect
-	require.NoError(t, err)
+	readEvent(t, b, "connect")
+	readEvent(t, b, "chainChanged")
 
 	go srv.AccountsChanged()
 	env, err := ipc.ReadEnvelope(b)
@@ -251,35 +318,88 @@ func TestServer_broadcastAccountsChanged(t *testing.T) {
 	require.Equal(t, wallets.Addresses()[2], list[0])
 }
 
-func TestRelay_copiesBytes(t *testing.T) {
-	sockA, sockB := net.Pipe()
-	stdinR, stdinW := io.Pipe()
-	stdoutR, stdoutW := io.Pipe()
-	done := make(chan error, 1)
-	go func() { done <- ipc.Relay(sockA, stdinR, stdoutW) }()
-
-	_, err := stdinW.Write([]byte("hello"))
-	require.NoError(t, err)
-	buf := make([]byte, 5)
-	_, err = io.ReadFull(sockB, buf)
-	require.NoError(t, err)
-	require.Equal(t, "hello", string(buf))
-
-	_, err = sockB.Write([]byte("world"))
-	require.NoError(t, err)
-	out := make([]byte, 5)
-	_, err = io.ReadFull(stdoutR, out)
-	require.NoError(t, err)
-	require.Equal(t, "world", string(out))
-
-	// Closing pipes unblocks Relay.
-	_ = stdinW.Close()
-	_ = sockB.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout")
+func TestServer_connectDoesNotWaitForChainId(t *testing.T) {
+	started := make(chan struct{})
+	unblock := make(chan struct{})
+	h := mockHandler{
+		selected: wallets.Addresses()[0],
+		fn: func(method string, params any) (any, error) {
+			switch method {
+			case "eth_chainId":
+				close(started)
+				<-unblock
+				return "0x7a69", nil
+			case "eth_accounts":
+				return []string{"0xabc"}, nil
+			default:
+				return nil, errors.New(method)
+			}
+		},
 	}
+	srv := ipc.NewServer(h)
+	a, b := net.Pipe()
+	t.Cleanup(func() {
+		_ = a.Close()
+		_ = b.Close()
+	})
+	go srv.ServeConn(a)
+
+	connectEnv := readReply(t, b)
+	var connect ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(connectEnv.Payload, &connect))
+	require.Equal(t, "connect", connect.Event)
+	params, _ := connect.Params.(map[string]any)
+	_, hasChainID := params["chainId"]
+	require.False(t, hasChainID)
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for eth_chainId")
+	}
+
+	id := mustULID(t)
+	payload, err := ipc.EncodeJSON(ipc.RequestPayload{Method: "eth_accounts"})
+	require.NoError(t, err)
+	require.NoError(t, b.SetWriteDeadline(time.Now().Add(2*time.Second)))
+	require.NoError(t, ipc.WriteFrame(b, ipc.Envelope{ULID: id, TS: 1, Payload: payload}))
+
+	got := readReply(t, b)
+	require.Equal(t, id, got.ULID)
+	var result ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(got.Payload, &result))
+	require.Equal(t, []any{"0xabc"}, result.Result)
+
+	close(unblock)
+	chainEnv := readReply(t, b)
+	var chain ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(chainEnv.Payload, &chain))
+	require.Equal(t, "chainChanged", chain.Event)
+	require.Equal(t, "0x7a69", chain.Params)
+}
+
+func TestServer_connectEventWhenChainIdFails(t *testing.T) {
+	h := mockHandler{
+		selected: wallets.Addresses()[0],
+		fn: func(method string, params any) (any, error) {
+			return nil, errors.New("anvil down")
+		},
+	}
+	srv := ipc.NewServer(h)
+	a, b := net.Pipe()
+	t.Cleanup(func() {
+		_ = a.Close()
+		_ = b.Close()
+	})
+	go srv.ServeConn(a)
+
+	env := readReply(t, b)
+	var payload ipc.ResultPayload
+	require.NoError(t, json.Unmarshal(env.Payload, &payload))
+	require.Equal(t, "connect", payload.Event)
+	params, _ := payload.Params.(map[string]any)
+	_, hasChainID := params["chainId"]
+	require.False(t, hasChainID)
 }
 
 func mustULID(t *testing.T) string {

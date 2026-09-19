@@ -1,59 +1,54 @@
-# Welcome to Your New Wails3 Project!
+# Kabat
 
-Congratulations on generating your Wails3 application! This README will guide you through the next steps to get your project up and running.
+Kabat is a desktop developer wallet for local Ethereum work against [Anvil](https://book.getfoundry.sh/anvil/).
 
-## Getting Started
+**Only use it for local smart contract development against Anvil.** Kabat ships Foundry’s well-known test accounts. Those keys are public. Do not point it at mainnet, a public testnet, or any chain with real funds.
 
-1. Navigate to your project directory in the terminal.
+## Features
 
-2. To run your application in development mode, use the following command:
+- **MCP server** for coding agents: list wallets and contracts, send ETH or ERC-20, load ABIs, and call methods on your local Anvil node. See [AGENTS.md](AGENTS.md).
+- Anvil wallets with names, balances, ETH sends, and ERC-20 tokens
+- Transaction history with decoded calls
+- Contract details, ABI loading, view calls, and writes
+- Chrome and Firefox extension that injects an EIP-1193 provider (`window.ethereum`)
 
-   ```
-   wails3 dev
-   ```
+## Install
 
-   This will start your application and enable hot-reloading for both frontend and backend changes.
+You need [Anvil](https://book.getfoundry.sh/getting-started/installation) running first:
 
-3. To build your application for production, use:
+```bash
+anvil
+```
 
-   ```
-   wails3 build
-   ```
+Kabat talks to `http://127.0.0.1:8545` by default (change it in Settings).
 
-   This will create a production-ready executable in the `build` directory.
+### App
 
-## Exploring Wails3 Features
+Download a build from [GitHub Releases](https://github.com/dszlachta/kabat/releases), or from the **Release** workflow artifacts.
 
-Now that you have your project set up, it's time to explore the features that Wails3 offers:
+- **macOS:** unzip `kabat-macos-arm64.zip` and open `kabat.app`
+- **Linux:** run `kabat-linux-amd64` (Ubuntu 24.04+; needs GTK 4 and WebKitGTK 6)
 
-1. **Check out the examples**: The best way to learn is by example. Visit the `examples` directory in the `v3/examples` directory to see various sample applications.
+To build from source you need Go 1.25+, Node 22+, and [Wails v3](https://v3.wails.io/quick-start/installation/). On Linux also install `libgtk-4-dev` and `libwebkitgtk-6.0-dev`. From the repo root, `go install` picks the Wails version in `go.mod`:
 
-2. **Run an example**: To run any of the examples, navigate to the example's directory and use:
+```bash
+go install github.com/wailsapp/wails/v3/cmd/wails3
+wails3 build
+```
 
-   ```
-   go run .
-   ```
+The binary lands in `bin/`.
 
-   Note: Some examples may be under development during the alpha phase.
+### Browser extension (optional)
 
-3. **Explore the documentation**: Visit the [Wails3 documentation](https://v3.wails.io/) for in-depth guides and API references.
+1. Load `extension/` as an unpacked Chrome or Firefox add-on.
+2. Install the native messaging host so the extension can reach the app:
 
-4. **Join the community**: Have questions or want to share your progress? Join the [Wails Discord](https://discord.gg/JDdSxwjhGf) or visit the [Wails discussions on GitHub](https://github.com/wailsapp/wails/discussions).
+```bash
+kabat install-native-host
+```
 
-## Project Structure
+Use the same `kabat` binary you run as the app.
 
-Take a moment to familiarize yourself with your project structure:
+### MCP (optional)
 
-- `frontend/`: Contains your frontend code (HTML, CSS, JavaScript/TypeScript)
-- `main.go`: The entry point of your Go backend
-- `app.go`: Define your application structure and methods here
-- `wails.json`: Configuration file for your Wails project
-
-## Next Steps
-
-1. Modify the frontend in the `frontend/` directory to create your desired UI.
-2. Add backend functionality in `main.go`.
-3. Use `wails3 dev` to see your changes in real-time.
-4. When ready, build your application with `wails3 build`.
-
-Happy coding with Wails3! If you encounter any issues or have questions, don't hesitate to consult the documentation or reach out to the Wails community.
+In Kabat, open Settings and enable **MCP server**. Agents connect to `http://127.0.0.1:19375`. Details for agents are in [AGENTS.md](AGENTS.md).

@@ -26,8 +26,11 @@ type Envelope struct {
 
 // RequestPayload is a standard EIP-1193 request.
 type RequestPayload struct {
-	Method string `json:"method"`
-	Params any    `json:"params"`
+	ULID        string `json:"-"`
+	Method      string `json:"method"`
+	Params      any    `json:"params"`
+	Origin      string `json:"origin,omitempty"`
+	SessionULID string `json:"sessionUlid,omitempty"`
 }
 
 // ResultPayload is a standard EIP-1193 result, error, or event.

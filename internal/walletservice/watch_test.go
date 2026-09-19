@@ -43,6 +43,42 @@ func (a *watchEthAPI) GetBalance(_ context.Context, address common.Address, _ rp
 	return (*hexutil.Big)(big.NewInt(0)), nil
 }
 
+func TestWatchHeads_emitsTransactions(t *testing.T) {
+	srv, signed := startTransferRPC(t)
+	svc := NewWithURL(srv.URL)
+	got := make(chan []StoredTx, 1)
+	svc.SetEmitter(func(event string, data any) {
+		if event == "transactions" {
+			got <- data.([]StoredTx)
+		}
+	})
+
+	heads := make(chan *types.Header, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- svc.watchHeads(ctx, heads, nil) }()
+
+	heads <- &types.Header{Number: big.NewInt(1)}
+	select {
+	case txs := <-got:
+		require.Len(t, txs, 1)
+		require.Equal(t, signed.Hash().Hex(), txs[0].Hash)
+		require.Equal(t, "transfer", txs[0].Kind)
+		from := wallets.Accounts()[0].Address.Hex()
+		require.Equal(t, "-"+twoEther().String(), txs[0].BalanceChanges[from])
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for transactions emit")
+	}
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for watchHeads to exit")
+	}
+}
+
 func TestWatchHeads_emitsAccounts(t *testing.T) {
 	ether := new(big.Int).Mul(big.NewInt(10000), big.NewInt(params.Ether))
 	balances := make(map[common.Address]*big.Int)
@@ -75,7 +111,7 @@ func TestWatchHeads_emitsAccounts(t *testing.T) {
 	case accs := <-got:
 		require.Len(t, accs, 10)
 		require.Equal(t, wallets.Addresses()[0], accs[0].Address)
-		require.Equal(t, "10000", accs[0].Balance)
+		require.Equal(t, hexutil.EncodeBig(ether), accs[0].Balance)
 	case <-time.After(2 * time.Second):
 		t.Fatal("timeout waiting for accounts emit")
 	}

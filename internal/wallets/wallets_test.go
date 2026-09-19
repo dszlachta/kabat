@@ -1,9 +1,11 @@
 package wallets_test
 
 import (
+	"encoding/hex"
 	"testing"
 
 	"github.com/dszlachta/kabat/internal/wallets"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,10 +30,12 @@ func TestLoadError_nil(t *testing.T) {
 }
 
 func TestAccounts_hasTenAnvilDefaults(t *testing.T) {
+	wallets.ResetAdded()
 	require.Len(t, wallets.Accounts(), 10)
 }
 
 func TestAccounts_addressesMatchAnvilDefaults(t *testing.T) {
+	wallets.ResetAdded()
 	accounts := wallets.Accounts()
 	require.Len(t, accounts, len(anvilAddresses))
 	for i, want := range anvilAddresses {
@@ -40,5 +44,48 @@ func TestAccounts_addressesMatchAnvilDefaults(t *testing.T) {
 }
 
 func TestAccountAddresses_returnsChecksummedHex(t *testing.T) {
+	wallets.ResetAdded()
 	require.Equal(t, anvilAddresses, wallets.Addresses())
+}
+
+func TestAddRandom_appendsWallet(t *testing.T) {
+	t.Cleanup(wallets.ResetAdded)
+	wallets.ResetAdded()
+	acc, err := wallets.AddRandom()
+	require.NoError(t, err)
+	require.NotEqual(t, "0x0000000000000000000000000000000000000000", acc.Address.Hex())
+	got, ok := wallets.Find(acc.Address)
+	require.True(t, ok)
+	require.Equal(t, acc.Address, got.Address)
+	require.Len(t, wallets.Accounts(), 11)
+}
+
+func TestAddPrivateKey_acceptsPrefixedHex(t *testing.T) {
+	t.Cleanup(wallets.ResetAdded)
+	wallets.ResetAdded()
+	key, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	hexKey := hex.EncodeToString(crypto.FromECDSA(key))
+	acc, err := wallets.AddPrivateKey("  0x" + hexKey + "\n")
+	require.NoError(t, err)
+	require.Equal(t, crypto.PubkeyToAddress(key.PublicKey), acc.Address)
+	require.Len(t, wallets.Accounts(), 11)
+}
+
+func TestAddPrivateKey_invalid(t *testing.T) {
+	t.Cleanup(wallets.ResetAdded)
+	wallets.ResetAdded()
+	for _, hexKey := range []string{"", "  ", "nope", "0xzz", "0x1234"} {
+		_, err := wallets.AddPrivateKey(hexKey)
+		require.ErrorIs(t, err, wallets.ErrInvalidPrivateKey, hexKey)
+	}
+	require.Len(t, wallets.Accounts(), 10)
+}
+
+func TestAddPrivateKey_duplicateAnvil(t *testing.T) {
+	t.Cleanup(wallets.ResetAdded)
+	wallets.ResetAdded()
+	_, err := wallets.AddPrivateKey("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+	require.ErrorIs(t, err, wallets.ErrDuplicateWallet)
+	require.Len(t, wallets.Accounts(), 10)
 }

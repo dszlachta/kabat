@@ -15,10 +15,53 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * ABISelectors returns selector hex → function name from loaded ABIs.
+ */
+export function ABISelectors(): $CancellablePromise<{ [_ in string]?: string } | null> {
+    return $Call.ByID(2241826873);
+}
+
+/**
  * Accounts returns the predefined Anvil wallets and their ETH balances.
  */
 export function Accounts(): $CancellablePromise<$models.Account[] | null> {
     return $Call.ByID(2052726277);
+}
+
+/**
+ * AddRandomWallet generates a new key, adds it to the list, and selects it.
+ */
+export function AddRandomWallet(): $CancellablePromise<void> {
+    return $Call.ByID(4275986166);
+}
+
+/**
+ * AddWalletFromKey imports a hex private key (optional 0x), adds it, and selects it.
+ */
+export function AddWalletFromKey(privateKey: string): $CancellablePromise<void> {
+    return $Call.ByID(3673887144, privateKey);
+}
+
+/**
+ * AllowConnect approves the pending dapp connection for address.
+ */
+export function AllowConnect(address: string): $CancellablePromise<void> {
+    return $Call.ByID(2356800376, address);
+}
+
+/**
+ * CallContract packs ABI args and eth_calls view/pure methods, or sends a tx.
+ * Empty from uses the UI-selected wallet. Value is wei hex (empty = 0x0).
+ */
+export function CallContract(address: string, selector: string, args: string[] | null, $from: string, value: string): $CancellablePromise<$models.ContractCallResult> {
+    return $Call.ByID(3628846543, address, selector, args, $from, value);
+}
+
+/**
+ * CancelConnect rejects the pending dapp connection.
+ */
+export function CancelConnect(): $CancellablePromise<void> {
+    return $Call.ByID(2255663575);
 }
 
 /**
@@ -33,6 +76,48 @@ export function CancelPending(): $CancellablePromise<void> {
  */
 export function ConfirmPending(): $CancellablePromise<void> {
     return $Call.ByID(1956768998);
+}
+
+/**
+ * ContractDetails returns on-chain identity and deployment facts for address.
+ */
+export function ContractDetails(address: string): $CancellablePromise<$models.ContractDetails> {
+    return $Call.ByID(1458881611, address);
+}
+
+/**
+ * ContractInfo returns in-memory details for address (empty ABI if unknown).
+ */
+export function ContractInfo(address: string): $CancellablePromise<$models.ContractInfo> {
+    return $Call.ByID(161097679, address);
+}
+
+/**
+ * Contracts returns successful wallet creates, newest first.
+ */
+export function Contracts(): $CancellablePromise<$models.StoredContract[] | null> {
+    return $Call.ByID(2038622216);
+}
+
+/**
+ * DappMessages returns the in-memory dapp RPC log (newest last).
+ */
+export function DappMessages(): $CancellablePromise<$models.DappMessage[] | null> {
+    return $Call.ByID(621772762);
+}
+
+/**
+ * Disconnect drops a dapp session so later RPCs from it are unauthorized.
+ */
+export function Disconnect(sessionULID: string): $CancellablePromise<void> {
+    return $Call.ByID(2453078227, sessionULID);
+}
+
+/**
+ * LoadContractABI opens a JSON file and stores its ABI for address.
+ */
+export function LoadContractABI(address: string): $CancellablePromise<$models.ContractInfo> {
+    return $Call.ByID(1488817635, address);
 }
 
 /**
@@ -54,4 +139,74 @@ export function Select(address: string): $CancellablePromise<void> {
  */
 export function Selected(): $CancellablePromise<string> {
     return $Call.ByID(2950056556);
+}
+
+/**
+ * SendERC20 transfers amount token units from the selected wallet.
+ */
+export function SendERC20(token: string, to: string, amount: string): $CancellablePromise<string> {
+    return $Call.ByID(1182368295, token, to, amount);
+}
+
+/**
+ * SendETH transfers value wei (hex) from the selected wallet to to.
+ */
+export function SendETH(to: string, value: string): $CancellablePromise<string> {
+    return $Call.ByID(2198436122, to, value);
+}
+
+/**
+ * SetAccountName stores a display name for a known wallet and writes config.
+ */
+export function SetAccountName(address: string, name: string): $CancellablePromise<void> {
+    return $Call.ByID(1932048877, address, name);
+}
+
+/**
+ * SetAnvilURL stores the JSON-RPC URL (empty resets to the default) and writes config.
+ */
+export function SetAnvilURL(raw: string): $CancellablePromise<void> {
+    return $Call.ByID(693962816, raw);
+}
+
+/**
+ * SetMCP stores the MCP server toggle, starts or stops the server, and writes config.
+ */
+export function SetMCP(enabled: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1436790009, enabled);
+}
+
+/**
+ * Settings returns the current Anvil URL and MCP toggle.
+ */
+export function Settings(): $CancellablePromise<$models.Settings> {
+    return $Call.ByID(2203394896);
+}
+
+/**
+ * Tokens returns ERC-20s among successful creates, newest first.
+ */
+export function Tokens(): $CancellablePromise<$models.ERC20Token[] | null> {
+    return $Call.ByID(3706813323);
+}
+
+/**
+ * Transactions returns mined txs, newest first.
+ */
+export function Transactions(): $CancellablePromise<$models.StoredTx[] | null> {
+    return $Call.ByID(2872931448);
+}
+
+/**
+ * TransactionsFor returns mined txs involving address (from or to), newest first.
+ */
+export function TransactionsFor(address: string): $CancellablePromise<$models.StoredTx[] | null> {
+    return $Call.ByID(1205744615, address);
+}
+
+/**
+ * TxDetails returns decoded details for a mined transaction.
+ */
+export function TxDetails(hash: string): $CancellablePromise<$models.TxDetails> {
+    return $Call.ByID(1932809249, hash);
 }
