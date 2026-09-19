@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Kabat",
+  "version": "0.1.0",
+  "description": "Injects a local Kabat EIP-1193 provider",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAy8V54kGcWeqiwxaE8bUh8IzXm9I6iKM0ZyBd15e4YRA71lN+G6wFU+XeVACdbaSBk/03AUaHwk2qQp+ZPnu5AlK/Fr1XVd0SHswPOsxS9Rj7sWVHP3im0hWZTVpHNpdmXR/kWXi7ROs4KThjk3GNV5rNfmo6D2BVfzsjjT6MAQrMGC3gmTN9Ts2aYRPWHnynH0eFkMTg4OqYqvgy6Ea8jjmgIik5V+kA+NTTVVrWaQDlFPeW0j2PyKz7JcE8yoegcH1HuMRvAM1VLEpZB0w36sgYbvwEkyITD+KZU7kpbDFJk3d9Scr/zjbUhtd8iW2GirSziPaACaihiVXOMF24JQIDAQAB",
+  "permissions": ["nativeMessaging"],
+  "background": {
+    "scripts": ["background.js"],
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inpage.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "kabat@dszlachta",
+      "strict_min_version": "121.0"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "kabat-extension",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "ulid": "^3.0.2"
+  }
+}
