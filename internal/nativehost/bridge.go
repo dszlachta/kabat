@@ -56,14 +56,18 @@ func Bridge(socketPath string, stdin io.Reader, stdout io.Writer) error {
 		}
 	}
 	writeSock := func(p []byte) {
-		mu.Lock()
-		c := sock
-		mu.Unlock()
-		if c == nil {
+		for ctx.Err() == nil {
+			mu.Lock()
+			c := sock
+			mu.Unlock()
+			if c == nil {
+				time.Sleep(5 * time.Millisecond)
+				continue
+			}
+			if _, err := c.Write(p); err != nil {
+				_ = c.Close()
+			}
 			return
-		}
-		if _, err := c.Write(p); err != nil {
-			_ = c.Close()
 		}
 	}
 

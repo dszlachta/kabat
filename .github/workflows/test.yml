@@ -35,4 +35,5 @@ jobs:
           exit 1
 
       - name: Test
-        run: go test -tags integration -timeout 10m ./...
+        # Root and build/ pull in Wails (GTK + frontend/dist embed). Library tests live under internal/.
+        run: go test -tags integration -timeout 10m ./internal/...
