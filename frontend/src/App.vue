@@ -1,95 +1,134 @@
 <script setup lang="ts">
-import {onMounted, onUnmounted, ref} from 'vue'
+import {onMounted, ref} from 'vue'
 import {Events} from '@wailsio/runtime'
-import {WalletService} from '../bindings/github.com/dszlachta/kabat/internal/walletservice'
-import type {Account} from '../bindings/github.com/dszlachta/kabat/internal/walletservice'
+import {SettingsIcon} from '@lucide/vue'
+import Tab from './components/Tab.vue'
+import type {TabId} from './components/Tab.vue'
+import Wallets from './views/main/Wallets.vue'
+import Txs from './views/main/Txs.vue'
+import Contracts from './views/main/Contracts.vue'
+import {loadABISelectors, loadTxs} from './txs'
+import {applyRepeat} from './callForm'
+import {formatEtherExact} from './formatEther'
+import type {TxDetails} from '../bindings/github.com/dszlachta/kabat/internal/walletservice'
 
-const ANVIL_ERROR = 'cannot connect to local Anvil chain'
+const tab = ref<TabId>('wallets')
+const focusContract = ref('')
+const focusTx = ref('')
 
-const loading = ref(true)
-const error = ref('')
-const accounts = ref<Account[]>([])
-const copied = ref('')
+function openContract(address: string) {
+  focusContract.value = address
+  tab.value = 'contracts'
+}
 
-let offAccounts: (() => void) | undefined
+function repeatCall(details: TxDetails) {
+  if (details.kind !== 'call' || !details.to) {
+    return
+  }
+  const eth = formatEtherExact(details.value)
+  applyRepeat({
+    address: details.to,
+    selector: details.selector ?? '',
+    args: (details.args ?? []).map((arg) => arg.text),
+    from: details.from,
+    eth: eth === '0' ? '' : eth,
+  })
+  openContract(details.to)
+}
 
-async function load() {
-  loading.value = true
-  error.value = ''
-  try {
-    accounts.value = await WalletService.Accounts() ?? []
-  } catch {
-    accounts.value = []
-    error.value = ANVIL_ERROR
-  } finally {
-    loading.value = false
+function openTx(hash: string) {
+  focusTx.value = hash
+  tab.value = 'txs'
+}
+
+function openTxs() {
+  focusTx.value = ''
+  tab.value = 'txs'
+}
+
+function reportError(err: unknown) {
+  console.error(err)
+  if (typeof window !== 'undefined') {
+    window.alert(String(err))
   }
 }
 
-async function copyAddress(address: string) {
-  await navigator.clipboard.writeText(address)
-  copied.value = address
-  window.setTimeout(() => {
-    if (copied.value === address) {
-      copied.value = ''
-    }
-  }, 1500)
-}
-
-async function selectAccount(address: string) {
-  await WalletService.Select(address)
-  accounts.value = await WalletService.Accounts() ?? []
+async function openSettings() {
+  try {
+    await Events.Emit('open-settings')
+  } catch (err) {
+    reportError(err)
+  }
 }
 
 onMounted(() => {
-  load()
-  offAccounts = Events.On('accounts', (event) => {
-    if (Array.isArray(event.data)) {
-      accounts.value = event.data
-      error.value = ''
-    }
-  })
-})
-
-onUnmounted(() => {
-  offAccounts?.()
+  void loadTxs()
+  void loadABISelectors()
 })
 </script>
 
 <template>
-  <main class="container">
-    <h1 class="title"><span class="title-accent">Kabat</span></h1>
-    <p class="subtitle">Local Anvil development wallets</p>
-
-    <p v-if="loading" class="status">Connecting…</p>
-
-    <div v-else-if="error" class="error" role="alert">
-      <p class="error-message">{{ error }}</p>
-      <button class="btn" type="button" @click="load">Retry</button>
-    </div>
-
-    <ul v-else class="wallets" aria-label="Anvil wallets">
-      <li
-        v-for="account in accounts"
-        :key="account.address"
-        class="wallet"
-        :class="{ 'is-selected': account.selected }"
-        @click="selectAccount(account.address)"
-      >
-        <div class="identity">
-          <code class="address">{{ account.address }}</code>
-          <span v-if="account.selected" class="selected-label">Selected</span>
-          <button
-            class="copy"
-            type="button"
-            :aria-label="'Copy ' + account.address"
-            @click.stop="copyAddress(account.address)"
-          >
-            {{ copied === account.address ? 'Copied' : 'Copy' }}
-          </button>
-        </div>
-        <span class="balance">{{ account.balance }} ETH</span>
-      </li>
-    </ul>
-  </main>
+  <div class="app">
+    <header class="chrome">
+      <Tab v-model="tab" />
+      <button class="icon-btn settings" type="button" aria-label="Settings" @click="openSettings">
+        <SettingsIcon class="icon" />
+      </button>
+    </header>
+    <Wallets
+      v-if="tab === 'wallets'"
+      @select-tx="openTx"
+      @select-contract="openContract"
+      @see-all="openTxs"
+    />
+    <Txs
+      v-else-if="tab === 'txs'"
+      :focus-hash="focusTx"
+      @select-wallet="tab = 'wallets'"
+      @select-contract="openContract"
+      @repeat="repeatCall"
+      @focused="focusTx = ''"
+    />
+    <Contracts
+      v-else
+      :focus-address="focusContract"
+      @focused="focusContract = ''"
+      @select-tx="openTx"
+    />
+  </div>
 </template>
+
+<style lang="css" scoped>
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.chrome {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-2);
+  height: 50px;
+  padding: 0 var(--s-2) 0 78px;
+  --wails-draggable: drag;
+}
+
+.settings {
+  align-self: center;
+}
+
+.settings,
+.tab-panel {
+  --wails-draggable: no-drag;
+}
+
+.tab-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+</style>

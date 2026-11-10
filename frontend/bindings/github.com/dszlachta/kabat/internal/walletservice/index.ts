@@ -7,5 +7,24 @@ export {
 };
 
 export type {
-    Account
+    Account,
+    ContractArg,
+    ContractCallResult,
+    ContractDetails,
+    ContractEvent,
+    ContractFunction,
+    ContractInfo,
+    DappConnection,
+    DappMessage,
+    EIP712Field,
+    EIP712Info,
+    ERC20Summary,
+    ERC20Token,
+    Settings,
+    StoredContract,
+    StoredTx,
+    TxArg,
+    TxBalanceChange,
+    TxDetails,
+    TxLog
 } from "./models.js";

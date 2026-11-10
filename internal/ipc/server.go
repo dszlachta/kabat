@@ -70,7 +70,7 @@ func (s *Server) handle(nc net.Conn) {
 		s.mu.Unlock()
 	}()
 
-	s.pushConnect(cl)
+	go s.pushConnect(cl)
 
 	for {
 		env, err := ReadEnvelope(nc)
@@ -96,7 +96,16 @@ func (s *Server) handle(nc net.Conn) {
 			s.reply(cl, env.ULID, ResultPayload{Error: &RPCError{Code: codeInvalidRequest, Message: err.Error()}})
 			continue
 		}
-		result, callErr := s.handler.Request(req.Method, req.Params)
+		req.ULID = env.ULID
+		var result any
+		var callErr error
+		if dh, ok := s.handler.(interface {
+			RequestFromDapp(RequestPayload) (any, error)
+		}); ok {
+			result, callErr = dh.RequestFromDapp(req)
+		} else {
+			result, callErr = s.handler.Request(req.Method, req.Params)
+		}
 		if callErr != nil {
 			s.reply(cl, env.ULID, ResultPayload{Error: rpcError(callErr)})
 			continue
@@ -106,12 +115,25 @@ func (s *Server) handle(nc net.Conn) {
 }
 
 func (s *Server) pushConnect(cl *client) {
+	env, err := Event("connect", map[string]any{})
+	if err != nil {
+		report.Error(err)
+		return
+	}
+	if err := cl.write(env); err != nil {
+		report.Error(err)
+		return
+	}
+	go s.pushChainID(cl)
+}
+
+func (s *Server) pushChainID(cl *client) {
 	chainID, err := s.handler.Request("eth_chainId", nil)
 	if err != nil {
 		report.Error(err)
 		return
 	}
-	env, err := Event("connect", map[string]any{"chainId": chainID})
+	env, err := Event("chainChanged", chainID)
 	if err != nil {
 		report.Error(err)
 		return

@@ -10,15 +10,15 @@
     <Installer
         Path="."
         Arguments=""
-        InstallLocation="C:\Program Files\My Company\My Product">
+        InstallLocation="C:\Program Files\Kabat developers\Kabat">
     </Installer>
     <PackageInformation
-        PackageName="My Product"
-        PackageDisplayName="My Product"
-        PublisherName="CN=My Company"
-        PublisherDisplayName="My Company"
+        PackageName="Kabat"
+        PackageDisplayName="Kabat"
+        PublisherName="CN=Kabat developers"
+        PublisherDisplayName="Kabat developers"
         Version="0.1.0.0"
-        PackageDescription="A . application">
+        PackageDescription="Kabat Developer Wallet">
         <Capabilities>
             <Capability Name="runFullTrust" />
             
@@ -26,8 +26,8 @@
         <Applications>
             <Application
                 Id="com.example.app"
-                Description="A . application"
-                DisplayName="My Product"
+                Description="Kabat Developer Wallet"
+                DisplayName="Kabat"
                 ExecutableName="."
                 EntryPoint="Windows.FullTrustApplication">
                 
@@ -41,9 +41,9 @@
         </Dependencies>
         <Properties>
             <Framework>false</Framework>
-            <DisplayName>My Product</DisplayName>
-            <PublisherDisplayName>My Company</PublisherDisplayName>
-            <Description>A . application</Description>
+            <DisplayName>Kabat</DisplayName>
+            <PublisherDisplayName>Kabat developers</PublisherDisplayName>
+            <Description>Kabat Developer Wallet</Description>
             <Logo>Assets\AppIcon.png</Logo>
         </Properties>
     </PackageInformation>

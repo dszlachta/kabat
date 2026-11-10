@@ -12,10 +12,17 @@ import type * as walletservice$0 from "../../../../dszlachta/kabat/internal/wall
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "abi": { [_ in string]?: string } | null;
             "accounts": walletservice$0.Account[] | null;
             "confirm-no": void;
             "confirm-yes": void;
+            "connect-allow": string;
+            "connect-deny": void;
+            "import-key": void;
+            "open-settings": void;
+            "pendingConnection": { [_ in string]?: any } | null;
             "pendingTransaction": { [_ in string]?: any } | null;
+            "transactions": walletservice$0.StoredTx[] | null;
         }
     }
 }

@@ -6,6 +6,229 @@
  */
 export interface Account {
     "address": string;
+    "name": string;
     "balance": string;
     "selected": boolean;
+    "connected": number;
+    "connections": DappConnection[] | null;
+}
+
+/**
+ * ContractArg is one ABI event or function parameter.
+ */
+export interface ContractArg {
+    "type": string;
+    "name": string;
+    "indexed": boolean;
+}
+
+/**
+ * ContractCallResult is the Call-tab payload after a view call or send.
+ */
+export interface ContractCallResult {
+    "kind": string;
+    "from": string;
+    "outputs": TxArg[] | null;
+    "hash"?: string;
+}
+
+/**
+ * ContractDetails is the Contracts Details-tab payload.
+ */
+export interface ContractDetails {
+    "address": string;
+    "name"?: string;
+    "deployer": string;
+    "hash": string;
+    "blockNumber": number;
+    "balance": string;
+    "codeSize": number;
+    "bytecode": string;
+    "abiLoaded": boolean;
+    "functions": number;
+    "events": number;
+    "constructorArgs": TxArg[] | null;
+    "erc20"?: ERC20Summary | null;
+}
+
+/**
+ * ContractEvent is one ABI event for the Functions tab.
+ */
+export interface ContractEvent {
+    "name": string;
+    "inputs": ContractArg[] | null;
+}
+
+/**
+ * ContractFunction is one ABI function for the Functions tab.
+ */
+export interface ContractFunction {
+    "stateMutability": string;
+    "name": string;
+    "selector": string;
+    "inputs": ContractArg[] | null;
+    "outputs": ContractArg[] | null;
+}
+
+/**
+ * ContractInfo is the selected-contract pane payload.
+ */
+export interface ContractInfo {
+    "address": string;
+    "name": string;
+    "abi": string;
+    "events": ContractEvent[] | null;
+    "functions": ContractFunction[] | null;
+    "eip712"?: EIP712Info | null;
+}
+
+/**
+ * DappConnection is a dapp session allowed to use a wallet.
+ */
+export interface DappConnection {
+    "origin": string;
+    "sessionUlid": string;
+}
+
+/**
+ * DappMessage is one inbound dapp RPC or the matching wallet reply.
+ */
+export interface DappMessage {
+    "direction": string;
+    "sessionUlid": string;
+    "ulid": string;
+    "method": string;
+    "params"?: any;
+    "result"?: any;
+    "error"?: string;
+    "payloadJson"?: string;
+}
+
+/**
+ * EIP712Field is one typed-data member.
+ */
+export interface EIP712Field {
+    "name": string;
+    "type": string;
+}
+
+/**
+ * EIP712Info is the contract's EIP-712 schema from the ABI or artifact.
+ */
+export interface EIP712Info {
+    "primaryType"?: string;
+    "types"?: { [_ in string]?: EIP712Field[] | null } | null;
+}
+
+/**
+ * ERC20Summary is the ERC-20 block on contract details.
+ */
+export interface ERC20Summary {
+    "name"?: string;
+    "symbol"?: string;
+    "decimals": number;
+    "totalSupply"?: string;
+}
+
+/**
+ * ERC20Token is one probed token for the Send dialog picker.
+ */
+export interface ERC20Token {
+    "address": string;
+    "name"?: string;
+    "symbol"?: string;
+    "decimals": number;
+    "balance"?: string;
+}
+
+/**
+ * Settings is the persisted app preferences shown in the Settings window.
+ */
+export interface Settings {
+    "anvilUrl": string;
+    "defaultAnvilUrl": string;
+    "mcp": boolean;
+    "mcpUrl": string;
+}
+
+/**
+ * StoredContract is a successful create from an Anvil wallet.
+ */
+export interface StoredContract {
+    "address": string;
+    "blockNumber": number;
+    "hash": string;
+}
+
+/**
+ * StoredTx is a mined transaction kept for the Txs lists.
+ */
+export interface StoredTx {
+    "hash": string;
+    "blockNumber": number;
+    "from": string;
+    "to": string;
+    "value": string;
+    "gas": number;
+    "kind": string;
+    "selector"?: string;
+    "method"?: string;
+    "ok": boolean;
+    "state": string;
+    "contract"?: string;
+    "balanceChanges"?: { [_ in string]?: string } | null;
+}
+
+/**
+ * TxArg is one decoded ABI argument or event field.
+ */
+export interface TxArg {
+    "type": string;
+    "name": string;
+    "text": string;
+}
+
+/**
+ * TxBalanceChange is one Anvil-wallet ETH delta (gas excluded).
+ */
+export interface TxBalanceChange {
+    "address": string;
+    "delta": string;
+}
+
+/**
+ * TxDetails is the transaction-details pane payload.
+ */
+export interface TxDetails {
+    "hash": string;
+    "blockNumber": number;
+    "ok": boolean;
+    "kind": string;
+    "method"?: string;
+    "selector"?: string;
+    "from": string;
+    "to": string;
+    "contract"?: string;
+    "value": string;
+    "nonce": number;
+    "gasUsed": number;
+    "gasLimit": number;
+    "gasPrice": string;
+    "fee": string;
+    "balanceChanges": TxBalanceChange[] | null;
+    "calldata": string;
+    "args": TxArg[] | null;
+    "revert"?: string;
+    "logs": TxLog[] | null;
+}
+
+/**
+ * TxLog is one receipt log, with ABI-decoded fields when known.
+ */
+export interface TxLog {
+    "name"?: string;
+    "address": string;
+    "topics": string[] | null;
+    "data": string;
+    "args": TxArg[] | null;
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/dszlachta/kabat/internal/chain"
+	"github.com/dszlachta/kabat/internal/eip712"
 	"github.com/dszlachta/kabat/internal/wallets"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -86,7 +87,17 @@ func (p *Provider) Request(ctx context.Context, args RequestArguments) (any, err
 		return hexutil.EncodeBig(id), nil
 	case "eth_sendTransaction":
 		return p.sendTransaction(ctx, args.Params)
-	case "eth_sign", "personal_sign", "eth_signTypedData", "eth_signTypedData_v4":
+	case "eth_signTypedData_v4":
+		return p.signTypedData(ctx, args.Params)
+	case "eth_signTypedData":
+		if !eip712.LooksLikeV4(args.Params) {
+			return nil, &ProviderRpcError{
+				Code:    codeUnsupportedMethod,
+				Message: "the method " + args.Method + " is not supported",
+			}
+		}
+		return p.signTypedData(ctx, args.Params)
+	case "eth_sign", "personal_sign":
 		return nil, &ProviderRpcError{
 			Code:    codeUnsupportedMethod,
 			Message: "the method " + args.Method + " is not supported",

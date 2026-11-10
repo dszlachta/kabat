@@ -2,8 +2,8 @@ package nativehost
 
 import (
 	"encoding/json"
+	"io"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -37,18 +37,23 @@ func IsNativeLaunch(args []string) bool {
 	return false
 }
 
-// Run dials the GUI Unix socket and copies stdin/stdout (native messaging framing is unchanged).
+// Run copies Chrome stdio to the GUI Unix socket. If the GUI exits, the host
+// stays attached to Chrome and redials until stdin closes.
 func Run(socketPath string) error {
 	log.SetOutput(os.Stderr)
-	conn, err := net.Dial("unix", socketPath)
-	if err != nil {
-		return err
+	return Bridge(socketPath, os.Stdin, os.Stdout)
+}
+
+func writeProviderGone(w io.Writer) {
+	if acc, err := ipc.Event("accountsChanged", []string{}); err == nil {
+		_ = ipc.WriteFrame(w, acc)
 	}
-	defer func() {
-		// Shutting down; the GUI socket may already be closed.
-		_ = conn.Close()
-	}()
-	return ipc.Relay(conn, os.Stdin, os.Stdout)
+	if env, err := ipc.Event("disconnect", map[string]any{
+		"code":    4900,
+		"message": "provider is disconnected",
+	}); err == nil {
+		_ = ipc.WriteFrame(w, env)
+	}
 }
 
 type chromeManifest struct {

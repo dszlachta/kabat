@@ -1,0 +1,39 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Start Anvil
+        run: |
+          anvil --host 127.0.0.1 --port 8545 &
+          for i in $(seq 1 30); do
+            if cast chain-id --rpc-url http://127.0.0.1:8545 >/dev/null 2>&1; then
+              echo "Anvil is up"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Anvil failed to start"
+          exit 1
+
+      - name: Test
+        # Root and build/ pull in Wails (GTK + frontend/dist embed). Library tests live under internal/.
+        run: go test -tags integration -timeout 10m ./internal/...

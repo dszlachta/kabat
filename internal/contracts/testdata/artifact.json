@@ -1,0 +1,11 @@
+{
+  "abi": [
+    {
+      "type": "function",
+      "name": "symbol",
+      "stateMutability": "view",
+      "inputs": [],
+      "outputs": [{ "name": "", "type": "string" }]
+    }
+  ]
+}

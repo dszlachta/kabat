@@ -19,6 +19,8 @@ export default defineConfig({
       input: {
         main: resolve(root, "index.html"),
         confirm: resolve(root, "confirm.html"),
+        connect: resolve(root, "connect.html"),
+        settings: resolve(root, "settings.html"),
       },
     },
   },

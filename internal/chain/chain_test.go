@@ -10,6 +10,7 @@ import (
 
 	"github.com/dszlachta/kabat/internal/chain"
 	"github.com/dszlachta/kabat/internal/wallets"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -25,8 +26,10 @@ func (a *web3API) ClientVersion() string {
 }
 
 type ethAPI struct {
-	chainID  *big.Int
-	balances map[common.Address]*big.Int
+	chainID    *big.Int
+	balances   map[common.Address]*big.Int
+	codes      map[common.Address][]byte
+	callResult hexutil.Bytes
 }
 
 func (a *ethAPI) ChainId() *hexutil.Big {
@@ -41,6 +44,17 @@ func (a *ethAPI) GetBalance(_ context.Context, address common.Address, _ rpc.Blo
 		return (*hexutil.Big)(new(big.Int).Set(bal)), nil
 	}
 	return (*hexutil.Big)(big.NewInt(0)), nil
+}
+
+func (a *ethAPI) GetCode(_ context.Context, address common.Address, _ rpc.BlockNumberOrHash) hexutil.Bytes {
+	if a.codes == nil {
+		return nil
+	}
+	return a.codes[address]
+}
+
+func (a *ethAPI) Call(map[string]any, any) (hexutil.Bytes, error) {
+	return a.callResult, nil
 }
 
 func startRPC(t *testing.T, version string, eth *ethAPI) *httptest.Server {
@@ -101,6 +115,47 @@ func TestClient_BalanceAt(t *testing.T) {
 	t.Cleanup(client.Close)
 
 	got, err := client.BalanceAt(context.Background(), addr)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+}
+
+func TestClient_CodeAt(t *testing.T) {
+	addr := wallets.Accounts()[0].Address
+	code := []byte{0x60, 0x00, 0x60, 0x00, 0xfd}
+	srv := startRPC(t, "anvil/v1.0.0", &ethAPI{
+		chainID: big.NewInt(31337),
+		codes:   map[common.Address][]byte{addr: code},
+	})
+	client, err := chain.ConnectURL(context.Background(), srv.URL)
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	got, err := client.CodeAt(context.Background(), addr)
+	require.NoError(t, err)
+	require.Equal(t, code, got)
+
+	empty, err := client.CodeAt(context.Background(), wallets.Accounts()[1].Address)
+	require.NoError(t, err)
+	require.Empty(t, empty)
+}
+
+func TestClient_Call(t *testing.T) {
+	from := wallets.Accounts()[0].Address
+	to := wallets.Accounts()[1].Address
+	want := []byte{0xde, 0xad, 0xbe, 0xef}
+	srv := startRPC(t, "anvil/v1.0.0", &ethAPI{
+		chainID:    big.NewInt(31337),
+		callResult: want,
+	})
+	client, err := chain.ConnectURL(context.Background(), srv.URL)
+	require.NoError(t, err)
+	t.Cleanup(client.Close)
+
+	got, err := client.Call(context.Background(), ethereum.CallMsg{
+		From: from,
+		To:   &to,
+		Data: []byte{0x70, 0xa0, 0x82, 0x31},
+	})
 	require.NoError(t, err)
 	require.Equal(t, want, got)
 }
