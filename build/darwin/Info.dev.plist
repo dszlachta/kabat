@@ -8,7 +8,7 @@
         <key>CFBundleDisplayName</key>
             <string>Kabat Developer Wallet</string>
         <key>CFBundleExecutable</key>
-            <string>.</string>
+            <string>kabat</string>
         <key>CFBundleIdentifier</key>
             <string>com.example.app</string>
         <key>CFBundleVersion</key>
